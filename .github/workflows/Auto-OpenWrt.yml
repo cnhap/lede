@@ -1,0 +1,270 @@
+#
+# This is free software, lisence use MIT.
+# 
+# Copyright (C) 2019 P3TERX <https://p3terx.com>
+# Copyright (C) 2020 KFERMercer <KFER.Mercer@gmail.com>
+# 
+# <https://github.com/KFERMercer/OpenWrt-CI>
+#
+
+name: 自动编译x86_64_UEFI_IPv6_DocKer
+
+on:
+# 手动触发按钮  到actions 页面下点击 Run workflow 按钮  
+  workflow_dispatch:
+  
+# 定时触发
+  schedule:
+    - cron: 0 20 * * *
+  
+# Release 发布触发
+#  release:
+#    types: [published]
+
+# 点赞触发
+#  watch:
+#    types: [started]
+
+# 编辑触发
+#  push:
+#    branches: 
+#       - master
+
+jobs:
+
+  build_openwrt:
+
+    name: Build OpenWrt firmware
+
+    runs-on: ubuntu-latest
+
+    if: github.event.repository.owner.id == github.event.sender.id
+
+    steps:
+      # 校验本地文件
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          ref: master
+      # 初始化环境
+      - name: Space cleanup
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          docker rmi `docker images -q`
+          sudo rm -rf /usr/share/dotnet /etc/mysql /etc/php /etc/apt/sources.list.d
+          sudo -E apt-get -y purge azure-cli ghc* zulu* hhvm llvm* firefox google* dotnet* powershell openjdk* mysql* php* android*
+          sudo -E apt-get update
+          sudo -E apt-get -y install build-essential asciidoc binutils bzip2 gawk gettext git libncurses5-dev libz-dev patch python3 unzip zlib1g-dev lib32gcc1 libc6-dev-i386 subversion flex uglifyjs gcc-multilib g++-multilib p7zip p7zip-full msmtp libssl-dev texinfo libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint device-tree-compiler antlr3 gperf swig libtinfo5
+          sudo -E apt-get -y autoremove --purge
+          sudo -E apt-get clean
+          # sudo mkdir -p -m 777 /mnt/openwrt/bin /mnt/openwrt/build_dir/host /mnt/openwrt/build_dir/hostpkg /mnt/openwrt/dl /mnt/openwrt/feeds /mnt/openwrt/staging_dir
+          # ln -s /mnt/openwrt/bin ./bin
+          # mkdir -p ./build_dir
+          # ln -s -f /mnt/openwrt/build_dir/host ./build_dir/host
+          # ln -s -f /mnt/openwrt/build_dir/hostpkg ./build_dir/hostpkg
+          # ln -s /mnt/openwrt/dl ./dl
+          # ln -s /mnt/openwrt/feeds ./feeds
+          # ln -s /mnt/openwrt/staging_dir ./staging_dir
+          df -h
+          
+      # 下载插件   
+      - name: Custom plugin theme
+        run: |
+          # cd lede/package/lean  
+          # rm -rf luci-theme-argon
+          cd package
+          mkdir openwrt-packages
+          cd openwrt-packages
+          # 下载皮肤 
+          # git clone -b 18.06 https://github.com/jerrykuku/luci-theme-argon.git
+          # 酸酸乳
+          git clone https://github.com/fw876/helloworld.git
+          # 应用过滤
+          git clone https://github.com/destan19/OpenAppFilter.git
+          # Server酱 微信/Telegram 推送
+          git clone https://github.com/tty228/luci-app-serverchan.git
+          # 硬盘健康状况
+          # git clone https://github.com/iamaluckyguy/luci-app-smartinfo.git
+          # git clone https://github.com/tianiue/luci-packages.git
+          # git clone https://github.com/xiaorouji/openwrt-passwall.gi
+          # git clone https://github.com/vernesong/OpenClash.git
+          # git clone https://github.com/frainzy1477/luci-app-clash.git
+          # git clone https://github.com/jerrykuku/luci-app-ttnode.git
+          # git clone https://github.com/jerrykuku/luci-app-vssr.git
+          # git clone https://github.com/jerrykuku/lua-maxminddb.git
+          # git clone https://github.com/lisaac/luci-app-dockerman.git
+          # git clone https://github.com/lisaac/luci-lib-docker.git
+      
+      # 更新源
+      - name: Update feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          
+      # 添加自己要的插件
+      - name: Generate configuration file
+        run: |
+          rm -f ./.config*
+          touch ./.config
+          #
+          # 在 cat >> .config <<EOF 到 EOF 之间粘贴你的编译配置, 需注意缩进关系
+          # 例如:
+          cat >> .config <<EOF
+          # 编译x86_64_UEFI_IPv6_DocKer固件
+          CONFIG_TARGET_x86=y
+          CONFIG_TARGET_x86_64=y
+          CONFIG_TARGET_x86_64_DEVICE_generic=y
+          # 编译者信息
+          CONFIG_KERNEL_BUILD_USER="cnhap"
+          CONFIG_KERNEL_BUILD_DOMAIN="GitHub Actions @ Cnhap"
+          # 取消编译VMware镜像以及镜像填充
+          # CONFIG_TARGET_IMAGES_PAD is not set                                     # 取消编译VMware镜像以及镜像填充
+          # CONFIG_VMDK_IMAGES is not set                                           # 取消编译VMware镜像以及镜像填充
+          # 固件压缩
+          CONFIG_TARGET_IMAGES_GZIP=y
+          # 编译UEFI固件
+          CONFIG_EFI_IMAGES=y
+          # luci 的语言
+          CONFIG_LUCI_LANG_zh-cn=y
+          # 常用软件包
+          CONFIG_PACKAGE_curl=y
+          CONFIG_PACKAGE_htop=y
+          CONFIG_PACKAGE_nano=y
+          CONFIG_PACKAGE_screen=y
+          CONFIG_PACKAGE_shadow-utils=y
+          CONFIG_PACKAGE_tree=y
+          CONFIG_PACKAGE_vim-fuller=y
+          CONFIG_PACKAGE_wget=y
+          CONFIG_PACKAGE_bash=y
+          # 动态 DNS
+          CONFIG_PACKAGE_luci-app-ddns=y                                            # 动态域名 DNS（集成阿里 DDNS 客户端）
+          CONFIG_PACKAGE_ddns-scripts_cloudflare.com-v4=y                           # cloudflare.com公司的ddns
+          CONFIG_PACKAGE_ddns-scripts_aliyun=y                                      # 不编译测试结果
+          CONFIG_PACKAGE_ddns-scripts_dnspod=y                                      # 不编译测试结果
+          CONFIG_PACKAGE_e2fsprogs=y                                                # 维护ext2，ext3和ext4文件系统的工具程序集
+          # IPv6支持
+          CONFIG_PACKAGE_dnsmasq_full_dhcpv6=y                                      # ipv6 dhcp
+          CONFIG_PACKAGE_ipv6helper=y                                               # ipv6 帮助
+          CONFIG_PACKAGE_odhcp6c=y                                                  # ipv6 dhcp 
+          CONFIG_PACKAGE_odhcpd-ipv6only=y                                          # 仅ipv6 dhcp
+          CONFIG_PACKAGE_luci-proto-ipv6=y                                          # ipv6 端口
+          CONFIG_PACKAGE_luci-proto-ppp=y                                           # ppp 端口
+          CONFIG_PACKAGE_iputils-traceroute6=y                                      # ipv6诊断
+          # 多文件系统支持
+          CONFIG_PACKAGE_kmod-fs-antfs=y
+          CONFIG_PACKAGE_kmod-fs-squashfs=y
+          # CONFIG_PACKAGE_kmod-fs-nfs=y
+          # CONFIG_PACKAGE_kmod-fs-nfs-common=y
+          # CONFIG_PACKAGE_kmod-fs-nfs-v3=y
+          # CONFIG_PACKAGE_kmod-fs-nfs-v4=y
+          # CONFIG_PACKAGE_kmod-fs-ntfs=y
+          # USB3.0支持
+          CONFIG_PACKAGE_kmod-usb-uhci=y
+          CONFIG_PACKAGE_kmod-usb2-pci=y
+          CONFIG_PACKAGE_kmod-usb2=y
+          CONFIG_PACKAGE_kmod-usb3=y
+          CONFIG_PACKAGE_kmod-usb-ohci=y
+          CONFIG_PACKAGE_kmod-usb-ohci-pci=y
+          # 皮肤插件
+          # CONFIG_PACKAGE_luci-theme-argon=y                                        # 将Lean 源码 内的数据替换成 插件官方源
+          # 第三方插件选择
+          CONFIG_PACKAGE_luci-app-oaf=y                                             # 应用过滤
+          CONFIG_PACKAGE_luci-app-aria2=y                                           # Aria2下载工具
+          CONFIG_PACKAGE_luci-app-frpc=y                                            # 内网穿透Frp客户端
+          # CONFIG_PACKAGE_luci-app-hd-idle=y                                         # 硬盘休眠
+          # CONFIG_PACKAGE_luci-app-smartinfo=y                                       # 硬盘健康状况
+          CONFIG_PACKAGE_luci-app-diskman=y                                         # 磁盘管理工具
+          CONFIG_PACKAGE_luci-app-jd-dailybonus=y                                   # 京东签到服务 
+          CONFIG_PACKAGE_luci-app-openvpn-server=y                                  # openvpn 服务端
+          CONFIG_PACKAGE_luci-app-openvpn=y                                         # openvpn 客户端
+          CONFIG_PACKAGE_luci-app-serverchan=y                                      # Server酱 微信/Telegram 推送
+          CONFIG_PACKAGE_luci-app-wrtbwmon=y                                        # Server酱 微信推送配套要的
+          CONFIG_PACKAGE_luci-app-sfe=y                                             # Turbo ACC网络加速（集成FLOW,BBR,NAT,DNS...
+          CONFIG_PACKAGE_luci-app-ssr-plus=y                                        # 酸酸乳ShadowSocksR Plus+ 
+          CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Kcptun=y                         # 酸酸乳ShadowSocksR Plus+ 
+          CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_NaiveProxy=y                     # 酸酸乳ShadowSocksR Plus+
+          CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Redsocks2=y                      # 酸酸乳ShadowSocksR Plus+
+          CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks=y                    # 酸酸乳ShadowSocksR Plus+
+          CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_ShadowsocksR_Server=y            # 酸酸乳ShadowSocksR Plus+
+          CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_V2ray_plugin=y                   # 酸酸乳ShadowSocksR Plus+
+          CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Xray=y                           # 酸酸乳ShadowSocksR Plus+
+          CONFIG_PACKAGE_luci-app-ttyd=y                                            # 网页终端命令行(开启https后不显示 故取消编译)
+          CONFIG_PACKAGE_luci-app-netdata=y                                         # Netdata实时监控（图形化）(开启https后不显示 故取消编译)
+          CONFIG_PACKAGE_luci-app-docker=y                                          # Docker容器(dockerman更名为docker)
+          CONFIG_PACKAGE_luci-app-usb-printer=y                                     # USB 打印服务器
+          CONFIG_PACKAGE_luci-app-uugamebooster=y                                   # UU网游加速器
+          CONFIG_PACKAGE_luci-app-v2ray-server=y                                    # 待核实
+          CONFIG_PACKAGE_luci-app-webadmin=y                                        # Web管理页面设置
+          CONFIG_PACKAGE_luci-app-uhttpd=y                                          # uHTTPd Web服务器
+          # CONFIG_PACKAGE_luci-app-wireguard=y                                       # virtual**服务器 WireGuard状态
+          CONFIG_PACKAGE_luci-app-zerotier=y                                        # ZeroTier内网穿透
+          EOF
+          # CONFIG_v2ray-plugin_INCLUDE_GOPROXY is not set                          # 现在要加入这句才能编译成功
+          # CONFIG_XRAY_CORE_COMPRESS_GOPROXY is not set                            # 现在要加入这句才能编译成功
+          #
+          # ===============================================================
+          # 
+          sed -i 's/^[ \t]*//g' ./.config
+          make defconfig
+          
+      # 下载dl库
+      - name: Make download
+        run: |
+          make download -j8 || make download -j1 V=s
+          rm -rf $(find ./dl/ -size -1024c)
+          df -h
+          
+      # 编译固件
+      - name: Compile firmware
+        run: |
+          make -j$(nproc) || make -j1 V=s
+          echo "======================="
+          echo "Space usage:"
+          echo "======================="
+          df -h
+          echo "======================="
+          du -h ./ --max-depth=1
+          du -h /mnt/openwrt/ --max-depth=1 || true
+          
+      # 分别复制到对应文件夹
+      - name: Prepare artifact
+        run: |
+          mkdir -p ./artifact/firmware
+          mkdir -p ./artifact/package
+          mkdir -p ./artifact/buildinfo
+          rm -rf $(find ./bin/targets/ -type d -name "packages")
+          cp -rf $(find ./bin/targets/ -type f) ./artifact/firmware/
+          cp -rf $(find ./bin/packages/ -type f -name "*.ipk") ./artifact/package/
+          cp -rf $(find ./bin/targets/ -type f -name "*.buildinfo" -o -name "*.manifest") ./artifact/buildinfo/
+          
+      # 打包到 buildinfo
+      - name: Deliver buildinfo
+        uses: actions/upload-artifact@v2
+        with:
+          name: OpenWrt_buildinfo
+          path: ./artifact/buildinfo/
+
+      # 打包到 package
+      - name: Deliver package
+        uses: actions/upload-artifact@v2
+        with:
+          name: OpenWrt_package
+          path: ./artifact/package/
+
+      # 打包到 firmware
+      - name: Deliver firmware
+        uses: actions/upload-artifact@v2
+        with:
+          name: OpenWrt_firmware
+          path: ./bin/targets/
+
+      # 上传发布
+      - name: Upload release asset
+        if: github.event == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.YOURTOKEN }}
+          file: ./artifact/firmware/*
+          tag: ${{ github.ref }}
+          file_glob: true
